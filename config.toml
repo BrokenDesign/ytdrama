@@ -1,0 +1,15 @@
+[credentials]
+api_token = ""
+
+[database]
+name = "yt.db"
+
+[[channels]]
+name = "notsoErudite"
+id = "UCyfYnJbsQ20Ee0y_jqDq09A"
+aliases = ["erudite", "nse", "kyla"]
+
+[[channels]]
+name = "PresidentSunday"
+id = "UCK1HtOUD5s_3hhzy-bkpsiw"
+aliases = ["sunday"]
