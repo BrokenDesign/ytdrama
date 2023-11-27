@@ -6,8 +6,8 @@ format = "%(levelname)-8s; %(name)-35s; %(message)s"
 datefmt = "%I=%M=%S"
 
 [formatters.standard]
-format = "%(asctime)s; %(levelname)-8s; %(name)-35s; %(funcName)-30s;%(lineno)4d= %(message)s"
-datefmt = "%I=%M=%S"
+format = "%(asctime)s| %(levelname)-8s| %(name)-35s| %(funcName)-25s|%(lineno)4d= %(message)s"
+# datefmt = "%I=%M=%S"
 
 [formatters.multi_process]
 class = "logging.Formatter"
@@ -29,21 +29,20 @@ format = "Level= %(levelname)s\nTime= %(asctime)s\nProcess= %(process)d\nThread=
 level = "DEBUG"
 class = "logging.StreamHandler"
 formatter = "standard"
-# stream = "ext=//sys.stdout"
 
 [handlers.file_handler] 
-level = "INFO"
+level = "DEBUG"
 class = "logging.handlers.WatchedFileHandler"
-formatter = "multi_line"
-filename = "./logs/errors.log"
+formatter = "standard"
+filename = "./logs/yt.log"
 mode = "a"
 encoding = "utf-8"
   
 [loggers.ytdrama]
-level = "DEBUG"
+level = "INFO"
 propagate = false
 handlers = ["console_handler", "file_handler"]
 
 [loggers.root]
-level= "DEBUG"
+level= "INFO"
 handlers = ["console_handler", "file_handler"]

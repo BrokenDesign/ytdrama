@@ -2,7 +2,8 @@
 api_token = ""
 
 [database]
-name = "yt.db"
+name = "yt.sqlite"
+overwrite = true
 
 [[channels]]
 name = "notsoErudite"

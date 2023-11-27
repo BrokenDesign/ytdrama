@@ -1,150 +1,107 @@
 # type: ignore
 import logging
+from pprint import PrettyPrinter
 from typing import Optional
 
 import googleapiclient.discovery
 import googleapiclient.errors
+
 from box import Box
 from functional import seq
-from dotenv import load_dotenv
 from googleapiclient.discovery import Resource
-from sqlalchemy.orm import Session
 from youtube_transcript_api import YouTubeTranscriptApi
 
-from ytdrama.db import *
+from ytdrama.db import Playlist, Video
+from ytdrama.db import Session
 from ytdrama.settings import config
 
 logger = logging.getLogger(__name__)
+pp = PrettyPrinter(indent=2)
 
 client: Resource = googleapiclient.discovery.build(
     "youtube", "v3", developerKey=config.credentials.api_token
 )
-# print(str(response).encode("utf-8", "ignore"))
 
-def get_channel_playlists(id: str) -> Optional[tuple[Channel, list[Playlist]]]:
-    request = client.channels().list(part="snippet,contentDetails", id=id)  
-    response = {}
+
+def format(obj):
+    global pp
+    return f"\n{pp.pformat(obj)}\n"
+
+
+def get_channel_playlists(id: str) -> Optional[list[Playlist]]:
+    logger.info(f"Retrieving channel id={id}")
+    request = client.channels().list(part="snippet,contentDetails", id=id)
     try:
         response = request.execute()
-        logger.debug(response)
-        
-        channel = Channel(Box(response))
-        playlists = []
-        
-        for item in response["items"]: 
-            playlist = Playlist(Box(item))
-            playlists.append(playlist)
-            
-        logger.debug(channel)
-        logger.debug(playlists)
-        
-        return channel, playlists
-    
+        return [Playlist(Box(item)) for item in response["items"]]
+
     except Exception:
-        logger.error(f"ERROR: playlist id={id}, response={response}")
+        logger.error(f"ERROR: playlist id={id}")
 
 
-def get_playlist_videos(id: str) -> list[Video]:
-    request = client.playlistItems().list(
-        playlistId=id,
-        part='id,snippet,contentDetails',
-        maxResults = 5,
-    )
-    response = {}
+def get_video_transcript(id: str) -> Optional[list[dict]]:
+    logger.info(f"Retrieving transcript id={id}")
     try:
-        videos = []
-        while request:
-            logger.debug(request)
-            
-            response = request.execute()
-            logger.debug(response)
-            
-            videos = [Video(Box(item)) for item in response['items']]
-            request = client.playlistItems().list_next(request, response)
-            break
-        
-        return videos
-    
-    except Exception as err: 
-        logger.error(f"ERROR: video id={id}")
-        logger.error(response)
+        return YouTubeTranscriptApi.get_transcript(id)
+    except Exception:
+        logger.error(f"ERROR: transcript id={id}")
         return []
 
 
-def get_video_transcript(id: str) -> Optional[Transcript]:
-    response = {}
+def get_playlist_videos(id: str) -> list[Video]:
+    logger.info(f"Retrieving video id={id}")
+
+    def strip_description(data: dict) -> Box:
+        assert "snippet" in data, "Missing snippiet"
+        assert "description" in data["snippet"], "Missing description"
+        data["snippet"]["description"] = (
+            data["snippet"]["description"].encode("ascii", errors="ignore").decode()
+        )
+        return Box(data)
+
+    request = client.playlistItems().list(
+        playlistId=id,
+        part="id,snippet,contentDetails",
+        maxResults=50,
+    )
     try:
-        response = YouTubeTranscriptApi.get_transcript(id)
-        logger.debug("id={id}, response={response}")
-        
-        transcript = Transcript(Box(response))
-        logger.debug(transcript)
-        
-        return transcript
+        videos = []
+        while request:
+            response = request.execute()
+            videos += (
+                seq(response["items"])
+                .map(strip_description)
+                .map(lambda x: (x.snippet.resourceId.videoId, x))  # type: ignore
+                .map(lambda x: Video(x[1], get_video_transcript(x[0])))  # type: ignore
+                .to_list()  # type: ignore
+            )
+            request = client.playlistItems().list_next(request, response)
+
+        return videos
 
     except Exception:
-        logger.error(f"ERROR: transcript id={id}")
-        logger.error(response)
+        logger.error(f"ERROR: video id={id}")
+        return []
 
 
 def scrape(ids: list[str]) -> None:
-    session = Session(engine)
-    
-    for id in ids: 
-        channel: Optional[Channel] = None
-        playlists: list[Playlist] = []
-        transcripts: list[Transcript] = []
-        
-        channel_result = get_channel_playlists(id)
-        logger.debug(channel_result)
-        
-        if channel_result: 
-            channel, playlists = channel_result
-            
-            try: 
-                session.add(channel)
-                session.add_all(playlists)
-                session.commit()
-                logger.info(f"Saved channel: {channel}")
-                
-            except Exception: 
-                logger.error(f"Error writing channel for id={id}")
-                logger.error(channel)
-        
+    logger.info(f"Starting scrape...\n\n\n******************* SCRAPE: START\n")
+    session = Session()
+    for id in ids:
+        playlists = get_channel_playlists(id)
+        if playlists:
             for playlist in playlists:
-                logger.debug(playlist)
                 session.add(playlist)
-                    
                 videos = get_playlist_videos(playlist.id)
-                
-                if videos: 
-                    transcripts = (
-                        seq(videos)
-                        .map(lambda video: get_video_transcript(video.id))
-                        .filter(lambda transcript: transcript is not None)
-                        .to_list()
-                    ) 
-                    try: 
-                        session.add_all(transcripts)
+                if videos:
+                    try:
+                        session.add_all(videos)
                         session.commit()
-                        session.flush()
-                    
-                    except Exception: 
-                        logger.error(session)
-                        
-                    finally: 
+                    except Exception as err:
+                        logger.error(f"Error writing playlists for channel id={id}")
+                        session.rollback()
                         session.close()
-                        
-
-if __name__ == "__main__":
-    response = get_channel_playlists("UCyfYnJbsQ20Ee0y_jqDq09A")
-    logger.info(response)
-    if response is not None: 
-        channel, playlist = response
-        logger.info(channel)
-        logger.info(playlist)
-        logger.info("HERE")
-#   videos = get_playlist_videos("UUyfYnJbsQ20Ee0y_jqDq09A")
-    
-  
-
+                        raise err
+                    finally:
+                        session.flush()
+                        session.close()

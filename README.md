@@ -19,13 +19,12 @@ You need to create a .env file at project level (even if empty)
 GCS project with a generated API key placed in config.toml or the .env file (called SECRET). 
 
 ## Instructions
-From within the project directory run:
+* From within the project directory run:
 ```bash 
 poetry install
-poetry use 
 ```
-Change config.toml to reference the channels you want. 
-Configure anything else you want to change. 
-Run `/scripts/extract_data.py` to create the sqlite database. 
-All other analysis will be in either `scripts/` or `notebooks/`
+* Change config.toml to reference the channels you want. 
+* Configure anything else you want to change. 
+* Run `/scripts/extract_data.py` to create the sqlite database. 
+* All other analysis will be in either `scripts/` or `notebooks/`
 
